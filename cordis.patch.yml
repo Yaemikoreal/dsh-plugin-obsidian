@@ -1,0 +1,5 @@
+# Adds only this plugin's row to the composed profile tree.
+# Applied when this package is listed in the profile's `dsh.profile.bundles`.
+- insert:
+    - id: obsidian
+      name: dsh-plugin-obsidian

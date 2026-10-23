@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64" role="img" aria-label="Obsidian notes">
+  <defs>
+    <linearGradient id="obsidian-face-left" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#b39cff"/>
+      <stop offset="1" stop-color="#6f4ae8"/>
+    </linearGradient>
+    <linearGradient id="obsidian-face-right" x1="1" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#5b34d6"/>
+      <stop offset="1" stop-color="#3a1fa8"/>
+    </linearGradient>
+  </defs>
+  <path fill="url(#obsidian-face-left)" d="M32 4 7 18v28l25 14z"/>
+  <path fill="url(#obsidian-face-right)" d="M32 4l25 14v28L32 60z"/>
+  <path fill="#ffffff" fill-opacity="0.18" d="M32 4 7 18l25 14 25-14z"/>
+  <path fill="none" stroke="#ffffff" stroke-opacity="0.35" stroke-width="2" d="M32 32v28"/>
+</svg>

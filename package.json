@@ -1,0 +1,50 @@
+{
+  "name": "dsh-plugin-obsidian",
+  "version": "0.1.0",
+  "description": "Obsidian vault bridge for DeepSeek Harness: fast search, read, and write of notes, plus live Obsidian app integration through the Obsidian Local REST API.",
+  "author": "Yaemikoreal",
+  "license": "MIT",
+  "homepage": "https://github.com/Yaemikoreal/dsh-plugin-obsidian#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Yaemikoreal/dsh-plugin-obsidian.git"
+  },
+  "keywords": [
+    "deepseek",
+    "harness",
+    "dsh",
+    "dsh-plugin",
+    "obsidian",
+    "notes",
+    "vault",
+    "markdown"
+  ],
+  "icon": "assets/icon.svg",
+  "type": "module",
+  "main": "lib/index.js",
+  "exports": {
+    ".": "./lib/index.js",
+    "./cordis.patch.yml": "./cordis.patch.yml",
+    "./locale/en.json": "./locale/en.json",
+    "./locale/zh.json": "./locale/zh.json",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "lib",
+    "locale",
+    "assets",
+    "cordis.patch.yml",
+    "README.md"
+  ],
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "test": "node --test"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
+  }
+}

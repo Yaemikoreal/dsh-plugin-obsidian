@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Obsidian Notes",
+    "description": "Search, read, and write Obsidian notes from DeepSeek Harness, plus live app actions (open a note, active note, live search, daily notes, commands, tags) through the Local REST API."
+  }
+}

@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Obsidian 笔记",
+    "description": "让 DeepSeek Harness 直接搜索、读取和写入 Obsidian 笔记；装了 Local REST API 插件后还能操作正在运行的 Obsidian：打开笔记、读取当前笔记、实时搜索、日记、命令与标签。"
+  }
+}
