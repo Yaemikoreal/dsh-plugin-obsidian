@@ -4,7 +4,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![GitHub release](https://img.shields.io/github/v/release/Yaemikoreal/dsh-plugin-obsidian)](https://github.com/Yaemikoreal/dsh-plugin-obsidian/releases)
 
-把 **DeepSeek Harness（DSH）** 和 **Obsidian** 连起来：让 DSH 里的模型可以直接、快速地**查询**你的 Obsidian 笔记，也能**写入**（新建 / 覆盖 / 追加 / 按标题插入 / 合并 frontmatter）。
+把 **DeepSeek Harness（DSH）** 和 **Obsidian** 连起来：让 DSH 里的模型可以直接、快速地**查询**你的 Obsidian 笔记，**写入**（新建 / 覆盖 / 追加 / 按标题插入 / 合并 frontmatter），也能**整理**（移动 / 重命名并自动更新链接，删除默认进 `.trash/` 可恢复）。
 
 - **零依赖**：只用 Node 内置模块，没有构建步骤，装进 profile 就能跑。
 - **零配置**：自动从 Obsidian 自己的 `obsidian.json` 里发现仓库（vault），自动读取该仓库的 `.obsidian/` 设置（日记格式、模板等）。
@@ -59,7 +59,7 @@ dsh plugin --profile <你的profile> add "E:\path\to\dsh-plugin-obsidian"
 >       - 'E:\path\to\dsh-plugin-obsidian'
 > ```
 
-安装后 7 个工具直接出现在模型可调用列表里，可用 `obsidian_vaults` 确认状态。
+安装后 9 个工具直接出现在模型可调用列表里，可用 `obsidian_vaults` 确认状态。
 
 ### 插件列表里的中文名与中文描述
 
@@ -86,6 +86,8 @@ DSH 的插件页显示的是插件**自己声明**的标题与描述，取自包
 | `obsidian_list` | 目录树 / 平铺列表 / 标签云 / 文件夹统计 |
 | `obsidian_links` | 出链、反向链接、指向不存在笔记的链接 |
 | `obsidian_write` | 新建 / 覆盖 / 追加 / 前置 / 按标题插入，支持 frontmatter 合并与 dry-run |
+| `obsidian_move` | 移动 / 重命名笔记，自动更新引用它的 wikilink 与 markdown 链接（支持 dry-run） |
+| `obsidian_delete` | 删除笔记：默认移入 `.trash/` 可恢复，`permanent: true` 彻底删除；报告悬空反向链接 |
 | `obsidian_app` | 操作正在运行的 Obsidian（状态、打开、当前笔记、实时搜索、日记、命令、标签） |
 
 ### 查询
@@ -134,6 +136,24 @@ obsidian_write(note="Inbox/想法", mode="append", content="写完后打开", op
 - `content` 自带 `---` frontmatter 块时会被识别并规范化，不会重复写两遍。
 
 **写入安全性**：同目录临时文件 + `rename` 原子替换（失败会清理临时文件）；路径必须落在仓库内（拒绝 `..`、绝对路径、NUL）；拒绝 Windows 保留名（`CON`/`NUL`…）与以点或空格结尾的文件名；只允许 `writableExtensions`（默认 `.md/.markdown/.txt`）；`readOnly: true` 时拒绝一切写入；`dryRun` 只返回 diff；文件系统错误会转换成可自纠的提示（如「路径里有个文件不是文件夹」）。
+
+### 整理笔记（移动 / 重命名 / 删除）
+
+```
+obsidian_move(note="Projects/Alpha", to="Archive/")                       # 移入 Archive，保留文件名
+obsidian_move(note="Projects/Alpha", to="Archive/Alpha V2")               # 移动 + 重命名（缺扩展名自动补 .md）
+obsidian_move(note="Projects/Alpha", to="Alpha Renamed", dryRun=true)     # 同文件夹重命名，先预览
+obsidian_move(note="Projects/Alpha", to="Archive/", updateLinks=false)    # 只移动，不改任何链接
+obsidian_delete(note="Inbox/旧想法")                                       # 默认移入 .trash/Inbox/旧想法.md
+obsidian_delete(note="Inbox/旧想法", permanent=true, dryRun=true)          # 预览彻底删除与悬空链接
+```
+
+要点：
+
+- **`to` 的三种写法**：以 `/` 结尾（或指向已存在的文件夹）→ 移入该文件夹并保留文件名；带扩展名 → 作为目标完整路径（文件夹不存在会自动创建）；其余情况（无分隔符的裸名字）→ 同文件夹重命名。
+- **链接自动更新**（`updateLinks`，默认开）：引用该笔记的 wikilink / markdown 链接会被改写，被移动笔记自己的相对链接也会修正，行为对齐 Obsidian 自带的重命名。改写规则：**写死路径的链接**在路径失效后改写为新位置（优先最短可解析形式）；**裸名字链接**只要仍能解析到该笔记就保持原样（出现同名歧义时改写为带路径的消歧形式）；代码块与行内代码里长得一样的文本不会被误改。
+- **删除默认可恢复**：默认移入仓库的 `.trash/`（保留原子目录避免重名，加数字后缀处理冲突）；`permanent: true` 才会真正删除文件。两种方式都会在结果里**报告将悬空的反向链接**，方便随后清理。
+- 安全性与写入一致：路径必须落在仓库内、拒绝点目录（不能把笔记移进 `.trash/` 或 `.obsidian/` 绕过索引）、目标已存在时报错、`readOnly` 仓库拒绝整理、`dryRun` 只返回计划不改文件。
 
 ### 在线联动（Local REST API）
 
@@ -200,17 +220,17 @@ obsidian_app(action="tags")
 
 ```powershell
 cd dsh-plugin-obsidian
-node --test        # 54 个测试
+node --test        # 65 个测试
 ```
 
-测试覆盖：YAML/frontmatter 往返、标签/链接/标题解析、索引与缓存失效、8 种搜索模式、写入的 5 种模式与 `ifExists`、路径逃逸 / 保留文件名 / 只读拒绝、写入目标不被同名笔记劫持、工具参数校验、**用 DSH 自己的 JSON-Schema 校验器校验每个工具的 `parameters` 与 `output.schema` 及真实返回值**、UI 卡片呈现函数的纯函数性，以及针对本机真实 Obsidian 仓库的在线测试：2 个文件系统测试（Obsidian 关着也跑）和 3 个需要 Local REST API 的桥接测试（Obsidian 未运行或未装插件时自动跳过）。
+测试覆盖：YAML/frontmatter 往返、标签/链接/标题解析、索引与缓存失效、8 种搜索模式、写入的 5 种模式与 `ifExists`、移动的链接改写（裸名/路径/嵌入/代码块豁免/相对链接修正）、删除的回收站与冲突后缀、路径逃逸 / 保留文件名 / 只读拒绝、写入目标不被同名笔记劫持、工具参数校验、**用 DSH 自己的 JSON-Schema 校验器校验每个工具的 `parameters` 与 `output.schema` 及真实返回值**、UI 卡片呈现函数的纯函数性，以及针对本机真实 Obsidian 仓库的在线测试：2 个文件系统测试（Obsidian 关着也跑）和 3 个需要 Local REST API 的桥接测试（Obsidian 未运行或未装插件时自动跳过）。
 
 目录结构：
 
 ```
 lib/index.js     Cordis 插件入口：配置 schema、仓库发现、活动仓库与在线桥接的状态管理
-lib/tools.js     7 个工具的 schema、执行体、render 与 UI 卡片
-lib/vault.js     仓库索引、搜索、读取、写入、链接、日记
+lib/tools.js     9 个工具的 schema、执行体、render 与 UI 卡片
+lib/vault.js     仓库索引、搜索、读取、写入、移动/删除、链接、日记
 lib/markdown.js  frontmatter(YAML 子集)、标签、wikilink、标题解析
 lib/rest.js      Obsidian Local REST API 客户端
 lib/util.js      路径安全、glob、参数校验等工具函数
@@ -218,8 +238,8 @@ lib/util.js      路径安全、glob、参数校验等工具函数
 
 ### 有意不做的事
 
-- 不提供删除 / 重命名工具（避免模型误删笔记）。
-- 不修改 `.obsidian/` 下的配置。
+- 删除默认走 `.trash/`（与 Obsidian 本地回收站一致）而不是直接删文件；彻底删除需要显式 `permanent: true`。
+- 不修改 `.obsidian/` 下的配置，也不把笔记移入点目录。
 - 不跟随仓库内指向外部的符号链接（路径检查基于字符串解析）。
 
 ---

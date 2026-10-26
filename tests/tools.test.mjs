@@ -57,8 +57,10 @@ test('registers every tool with schemas inside the enforced JSON-Schema subset',
   await withPlugin({}, async ({ registered }) => {
     assert.deepEqual([...registered.keys()].sort(), [
       'obsidian_app',
+      'obsidian_delete',
       'obsidian_links',
       'obsidian_list',
+      'obsidian_move',
       'obsidian_read',
       'obsidian_search',
       'obsidian_vaults',
@@ -77,7 +79,8 @@ test('registers every tool with schemas inside the enforced JSON-Schema subset',
       for (const [key, node] of Object.entries(properties)) {
         assert.ok(node.type !== undefined || Array.isArray(node.oneOf), `${name}.${key} declares a type`)
       }
-      assert.equal(name === 'obsidian_write' ? definition.isConcurrencySafe({}) : definition.isConcurrencySafe({ action: 'search' }), name !== 'obsidian_write')
+      const mutating = ['obsidian_write', 'obsidian_move', 'obsidian_delete'].includes(name)
+      assert.equal(definition.isConcurrencySafe(mutating ? {} : { action: 'search' }), !mutating)
     }
   })
 })
@@ -155,6 +158,47 @@ test('write creates, appends, and previews with a valid canonical output', async
 
     const searched = await call('obsidian_search', { query: 'APPENDED-TOKEN' })
     assert.deepEqual(searched.value.matches.map((match) => match.path), ['Inbox/New.md'])
+  })
+})
+
+test('move and delete work end to end with valid canonical outputs', async () => {
+  await withPlugin({}, async ({ call, root }) => {
+    const plan = await call('obsidian_move', { note: 'Projects/Alpha.md', to: 'Projects/Alpha Renamed', dryRun: true })
+    assert.equal(plan.value.dryRun, true)
+    assert.equal(plan.value.to, 'Projects/Alpha Renamed.md')
+    assert.ok(plan.value.linksUpdated >= 2)
+    assert.ok(plan.content[0].text.includes('Would move'))
+
+    const moved = await call('obsidian_move', { note: 'Projects/Alpha.md', to: 'Archive/' })
+    assert.equal(moved.value.from, 'Projects/Alpha.md')
+    assert.equal(moved.value.to, 'Archive/Alpha.md')
+    assert.equal(moved.value.renamed, false)
+    assert.ok(moved.value.linksUpdated >= 1)
+    assert.equal(await fsp.access(path.join(root, 'Projects/Alpha.md')).then(() => true, () => false), false)
+    assert.equal(await fsp.readFile(path.join(root, 'Archive/Alpha.md'), 'utf8').then((text) => text.includes('# Alpha')), true)
+
+    const trashPlan = await call('obsidian_delete', { note: 'Archive/Alpha.md', dryRun: true })
+    assert.equal(trashPlan.value.dryRun, true)
+    assert.ok(trashPlan.value.backlinkCount >= 1)
+    assert.match(trashPlan.content[0].text, /Would remove/)
+
+    const trashed = await call('obsidian_delete', { note: 'Archive/Alpha.md' })
+    assert.equal(trashed.value.permanent, false)
+    assert.equal(trashed.value.trashTarget, '.trash/Archive/Alpha.md')
+    assert.equal(await fsp.access(path.join(root, 'Archive/Alpha.md')).then(() => true, () => false), false)
+    assert.equal(await fsp.access(path.join(root, '.trash/Archive/Alpha.md')).then(() => true, () => false), true)
+    assert.match(trashed.content[0].text, /Moved to trash/)
+  })
+})
+
+test('move and delete reject invalid input through the tool surface', async () => {
+  await withPlugin({}, async ({ call }) => {
+    await assert.rejects(() => call('obsidian_move', { note: 'Projects/Alpha.md' }), /missing required argument "to"/)
+    await assert.rejects(() => call('obsidian_move', { note: 'Projects/Alpha.md', to: 'Projects/Beta.md' }), /already exists/)
+    await assert.rejects(() => call('obsidian_move', { note: 'Ghost', to: 'X.md' }), /not found/)
+    await assert.rejects(() => call('obsidian_delete', {}), /missing required argument "note"/)
+    await assert.rejects(() => call('obsidian_delete', { note: 'Ghost' }), /not found/)
+    await assert.rejects(() => call('obsidian_delete', { note: 'Projects/Alpha.md', permanent: 'yes' }), /must be a boolean/)
   })
 })
 
@@ -297,7 +341,7 @@ test('renderers stay total for empty and unusual results', async () => {
       assert.equal(typeof RENDERERS[name], 'function')
     }
     const definitions = createObsidianTools({ state: null })
-    assert.equal(definitions.length, 7)
+    assert.equal(definitions.length, 9)
     for (const definition of definitions) {
       assert.ok(Object.hasOwn(PARAMETER_SCHEMAS, definition.name))
       assert.ok(Object.hasOwn(OUTPUT_SCHEMAS, definition.name))

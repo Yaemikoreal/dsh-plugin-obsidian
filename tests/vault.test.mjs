@@ -315,6 +315,162 @@ test('writeNote keeps new notes inside the vault and creates folders', async () 
   })
 })
 
+test('moveNote renames a note and rewrites the links that reference it', async () => {
+  await withVault({}, async (vault, root) => {
+    await vault.scan()
+    const result = await vault.moveNote({ note: 'Projects/Alpha.md', to: 'Projects/Alpha Renamed' })
+    assert.equal(result.from, 'Projects/Alpha.md')
+    assert.equal(result.to, 'Projects/Alpha Renamed.md')
+    assert.equal(result.renamed, true)
+    assert.equal(result.moved, false)
+    assert.equal(result.linksUpdated, 2)
+    assert.equal(result.filesUpdated, 2)
+
+    assert.equal(await fsp.access(path.join(root, 'Projects/Alpha.md')).then(() => true, () => false), false)
+    const moved = await fsp.readFile(path.join(root, 'Projects/Alpha Renamed.md'), 'utf8')
+    assert.ok(moved.includes('# Alpha'))
+
+    const welcome = await fsp.readFile(path.join(root, 'Welcome.md'), 'utf8')
+    assert.ok(welcome.includes('[[Alpha Renamed]]'), `Welcome should link the new name:\n${welcome}`)
+    const beta = await fsp.readFile(path.join(root, 'Projects/Beta.md'), 'utf8')
+    assert.ok(beta.includes('[[Alpha Renamed]]'), `Beta should link the new name:\n${beta}`)
+    // The index follows the move without a forced rescan.
+    assert.equal(vault.findFile('Projects/Alpha Renamed.md'), 'Projects/Alpha Renamed.md')
+    assert.equal(vault.findFile('Projects/Alpha.md'), null)
+    assert.equal((await vault.search({ query: 'Alpha', mode: 'title' })).total, 1)
+  })
+})
+
+test('moveNote keeps resolving bare-name links on a pure folder move and fixes path links', async () => {
+  await withVault({}, async (vault, root) => {
+    await vault.scan()
+    const result = await vault.moveNote({ note: 'Projects/Alpha.md', to: 'Archive/' })
+    assert.equal(result.to, 'Archive/Alpha.md')
+    assert.equal(result.moved, true)
+    assert.equal(result.renamed, false)
+
+    // Bare-name wikilinks still resolve to the moved note: untouched.
+    const beta = await fsp.readFile(path.join(root, 'Projects/Beta.md'), 'utf8')
+    assert.ok(beta.includes('[[Alpha]]'), `Beta keeps its bare link:\n${beta}`)
+    // The explicit-path link in Welcome is rewritten — to the shortest form
+    // that still resolves, which is now the bare name.
+    const welcome = await fsp.readFile(path.join(root, 'Welcome.md'), 'utf8')
+    assert.ok(welcome.includes('[[Alpha]]'), `Welcome should use the shortest link:\n${welcome}`)
+    assert.ok(!welcome.includes('[[Projects/Alpha]]'))
+    assert.equal(result.linksUpdated, 1)
+    assert.deepEqual(result.rewrites, [{ path: 'Welcome.md', line: 14, before: '[[Projects/Alpha]]', after: '[[Alpha]]' }])
+  })
+})
+
+test('moveNote updates embeds, skips code blocks, and fixes the moved note\'s own relative links', async () => {
+  await withVault({
+    files: {
+      'notes/Embeds.md': [
+        'Real: [[Projects/Alpha]] and ![[Projects/Alpha]] embed.',
+        '',
+        '```md',
+        'Inside a fence: [[Projects/Alpha]] stays.',
+        '```',
+        '',
+        'Inline `[[Projects/Alpha]]` code stays too.',
+        '',
+      ].join('\n'),
+      'notes/Relative.md': 'See [the alpha note](../Projects/Alpha.md) and [welcome](../Welcome.md).\n',
+    },
+  }, async (vault, root) => {
+    await vault.scan()
+    const result = await vault.moveNote({ note: 'Projects/Alpha.md', to: 'Archive/' })
+    assert.equal(result.to, 'Archive/Alpha.md')
+
+    const embeds = await fsp.readFile(path.join(root, 'notes/Embeds.md'), 'utf8')
+    assert.ok(embeds.includes('Real: [[Alpha]] and ![[Alpha]] embed.'), `real links rewritten to the shortest form:\n${embeds}`)
+    assert.ok(embeds.includes('Inside a fence: [[Projects/Alpha]] stays.'), 'fenced code untouched')
+    assert.ok(embeds.includes('Inline `[[Projects/Alpha]]` code stays too.'), 'inline code untouched')
+
+    const relative = await fsp.readFile(path.join(root, 'notes/Relative.md'), 'utf8')
+    assert.ok(relative.includes('(../Archive/Alpha.md)'), `markdown links are rewritten:\n${relative}`)
+    assert.ok(relative.includes('[welcome](../Welcome.md)'), 'unrelated markdown links untouched')
+  })
+})
+
+test('moveNote refuses collisions, self-moves, dot folders, and unwritable targets', async () => {
+  await withVault({}, async (vault) => {
+    await vault.scan()
+    await assert.rejects(() => vault.moveNote({ note: 'Projects/Alpha.md', to: 'Projects/Beta.md' }), /already exists/)
+    await assert.rejects(() => vault.moveNote({ note: 'Projects/Alpha.md', to: 'Projects/Alpha' }), /same as the source/)
+    await assert.rejects(() => vault.moveNote({ note: 'Projects/Alpha.md', to: '.trash/Alpha.md' }), /dot folder/)
+    await assert.rejects(() => vault.moveNote({ note: 'Projects/Alpha.md', to: 'Archive/Alpha.canvas' }), /not writable/)
+    await assert.rejects(() => vault.moveNote({ note: 'Missing Note', to: 'X.md' }), /not found/)
+    const readOnly = new ObsidianVault({ root: vault.root, ttlMs: 0, readOnly: true })
+    await assert.rejects(() => readOnly.moveNote({ note: 'Projects/Alpha.md', to: 'Archive/' }), /read-only/)
+  })
+})
+
+test('moveNote dryRun plans rewrites without touching anything', async () => {
+  await withVault({}, async (vault, root) => {
+    await vault.scan()
+    const plan = await vault.moveNote({ note: 'Projects/Alpha.md', to: 'Projects/Alpha Renamed', dryRun: true })
+    assert.equal(plan.dryRun, true)
+    assert.equal(plan.to, 'Projects/Alpha Renamed.md')
+    assert.equal(plan.linksUpdated, 2)
+    assert.ok(plan.rewrites.some((rewrite) => rewrite.before === '[[Projects/Alpha]]' && rewrite.after === '[[Alpha Renamed]]'))
+    assert.ok(plan.rewrites.some((rewrite) => rewrite.before === '[[Alpha]]' && rewrite.after === '[[Alpha Renamed]]'))
+    // Nothing moved, nothing rewritten.
+    assert.equal(await fsp.access(path.join(root, 'Projects/Alpha.md')).then(() => true, () => false), true)
+    const welcome = await fsp.readFile(path.join(root, 'Welcome.md'), 'utf8')
+    assert.ok(welcome.includes('[[Projects/Alpha]]'))
+    assert.equal(await fsp.access(path.join(root, 'Projects/Alpha Renamed.md')).then(() => true, () => false), false)
+  })
+})
+
+test('deleteNote moves a note into .trash and reports dangling backlinks', async () => {
+  await withVault({}, async (vault, root) => {
+    await vault.scan()
+    const result = await vault.deleteNote({ note: 'Projects/Alpha.md' })
+    assert.equal(result.permanent, false)
+    assert.equal(result.trashTarget, '.trash/Projects/Alpha.md')
+    assert.equal(result.backlinkCount >= 2, true)
+    assert.ok(result.backlinks.some((backlink) => backlink.path === 'Welcome.md'))
+
+    assert.equal(await fsp.access(path.join(root, 'Projects/Alpha.md')).then(() => true, () => false), false)
+    const trashed = await fsp.readFile(path.join(root, '.trash/Projects/Alpha.md'), 'utf8')
+    assert.ok(trashed.includes('# Alpha'))
+    assert.equal(vault.findFile('Projects/Alpha.md'), null)
+    assert.equal((await vault.search({ query: 'Alpha project notes', mode: 'phrase' })).total, 0)
+  })
+})
+
+test('deleteNote permanent removes the file, dryRun only reports', async () => {
+  await withVault({}, async (vault, root) => {
+    await vault.scan()
+    const plan = await vault.deleteNote({ note: 'Projects/Beta.md', dryRun: true })
+    assert.equal(plan.dryRun, true)
+    assert.ok(plan.trashTarget !== null)
+    assert.equal(await fsp.access(path.join(root, 'Projects/Beta.md')).then(() => true, () => false), true)
+
+    const done = await vault.deleteNote({ note: 'Projects/Beta.md', permanent: true })
+    assert.equal(done.permanent, true)
+    assert.equal(done.trashTarget, null)
+    assert.equal(await fsp.access(path.join(root, 'Projects/Beta.md')).then(() => true, () => false), false)
+    assert.equal(await fsp.access(path.join(root, '.trash/Projects/Beta.md')).then(() => true, () => false), false)
+
+    const readOnly = new ObsidianVault({ root, ttlMs: 0, readOnly: true })
+    await assert.rejects(() => readOnly.deleteNote({ note: 'Welcome.md' }), /read-only/)
+  })
+})
+
+test('deleteNote collision in .trash gets a numeric suffix', async () => {
+  await withVault({}, async (vault, root) => {
+    await fsp.mkdir(path.join(root, '.trash', 'Projects'), { recursive: true })
+    await fsp.writeFile(path.join(root, '.trash/Projects/Alpha.md'), 'older trash\n', 'utf8')
+    await vault.scan()
+    const result = await vault.deleteNote({ note: 'Projects/Alpha.md' })
+    assert.equal(result.trashTarget, '.trash/Projects/Alpha.1.md')
+    assert.equal(await fsp.readFile(path.join(root, '.trash/Projects/Alpha.md'), 'utf8'), 'older trash\n')
+    assert.ok((await fsp.readFile(path.join(root, '.trash/Projects/Alpha.1.md'), 'utf8')).includes('# Alpha'))
+  })
+})
+
 test('the index and parse cache follow external edits', async () => {
   await withVault({}, async (vault, root) => {
     await vault.scan()

@@ -10,11 +10,29 @@ import {
   joinBlocks,
   parseFrontmatter,
   parseYamlSubset,
+  replaceLinkOnLine,
   slugify,
   splitLines,
   stringifyFrontmatter,
   stripCodeBlocks,
 } from '../lib/markdown.js'
+
+test('replaceLinkOnLine rewrites real links but leaves code regions alone', () => {
+  const line = 'See [[Projects/Alpha]] and `[[Projects/Alpha]]` here.'
+  const stripped = stripCodeBlocks(line)
+  assert.equal(
+    replaceLinkOnLine(line, stripped, '[[Projects/Alpha]]', '[[Alpha]]'),
+    'See [[Alpha]] and `[[Projects/Alpha]]` here.',
+  )
+  // Every real occurrence is replaced.
+  assert.equal(
+    replaceLinkOnLine('[[A]] and [[A]] again', stripCodeBlocks('[[A]] and [[A]] again'), '[[A]]', '[[B]]'),
+    '[[B]] and [[B]] again',
+  )
+  // No occurrence (or empty needle) → the line comes back untouched.
+  assert.equal(replaceLinkOnLine('nothing here', 'nothing here', '[[x]]', '[[y]]'), 'nothing here')
+  assert.equal(replaceLinkOnLine('text', 'text', '', '[[y]]'), 'text')
+})
 
 test('parseFrontmatter separates frontmatter, body, and body line', () => {
   const text = '---\ntitle: Hi\ntags: [a, b]\n---\n# Body\n\ntext\n'
