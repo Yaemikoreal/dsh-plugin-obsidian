@@ -31,7 +31,14 @@ const skip = live ? false : `Obsidian Local REST API not reachable (${probe.erro
 
 function toolset() {
   const registered = new Map()
-  const ctx = { tools: { register(definition) { registered.set(definition.name, definition); return () => {} } } }
+  const ctx = {
+    tools: { register(definition) { registered.set(definition.name, definition); return () => {} } },
+    inject(services, mount) {
+      if (services.includes('systemPrompt')) {
+        mount({ section() { return () => {} } })
+      }
+    },
+  }
   apply(ctx, Config['~standard'].validate({ stateDir }).value)
   return registered
 }

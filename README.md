@@ -197,6 +197,16 @@ obsidian_app(action="tags")
 
 桥接不可用时会给出可执行的提示（例如「未安装 Local REST API 插件」），文件系统类工具不受影响。
 
+### 行为引导（Agent 自主查库与记笔记）
+
+工具只是能力，Agent 用不用、什么时候用，由注入到系统提示里的**行为引导**决定。插件通过 `ctx.systemPrompt.section()` 注册一段引导（`obsidian:agent-guidance`，可配置关闭），内容只有两条：
+
+- **何时查库**：用户提到他的笔记 / 过去的讨论 / 计划 / 决定时；复用已有记录能省去重复解释时；以及在下「我们从没聊过 X」这类结论**之前**——先搜一下，比错误断言便宜。
+- **何时落笔**：一轮实质性对话或任务结束后**自主判断**是否值得记：决定及其理由、方案与排障结论、项目进展、值得回看的参考、会议纪要。值得就直接写，不必请示——今天的日记追加一行（`@daily`），或写到话题匹配的文件夹；闲聊与瞬时问答不记。
+- 另附一条纪律：**建新笔记前先搜**，优先扩展已有笔记而不是造近似重复。
+
+引导只讲「何时 / 为何」，不复述工具参数（那是工具定义自己的事）。不想要这段提示时在配置里 `agentGuidance: false` 即可；没有 systemPrompt 服务的 profile 里插件照常工作，只是不带引导。
+
 ---
 
 ## 3. 配置（可选）
@@ -221,6 +231,7 @@ obsidian_app(action="tags")
     dailyFormat: YYYY-MM-DD
     attachmentFolder: attachments              # 附件落点覆盖（默认跟随 .obsidian/app.json）
     attachmentExtensions: ['.png', '.pdf']     # 附件允许的扩展名（默认 png/jpg/jpeg/gif/webp/svg）
+    agentGuidance: true                        # 注入「何时查库 / 何时记笔记」的行为引导（默认开）
     # rest:
     #   enabled: true
     #   baseURL: http://127.0.0.1:27123

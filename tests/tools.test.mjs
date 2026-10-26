@@ -20,6 +20,7 @@ async function withPlugin(options, run) {
   process.env.APPDATA = path.join(stateDir, 'appdata')
   await fsp.mkdir(process.env.APPDATA, { recursive: true })
   const registered = new Map()
+  const sections = []
   const ctx = {
     tools: {
       register(definition) {
@@ -27,6 +28,16 @@ async function withPlugin(options, run) {
         registered.set(definition.name, definition)
         return () => registered.delete(definition.name)
       },
+    },
+    inject(services, mount) {
+      if (services.includes('systemPrompt')) {
+        mount({
+          section(section) {
+            sections.push(section)
+            return () => {}
+          },
+        })
+      }
     },
   }
   const config = normalizeConfig({ vault: root, stateDir, ...(options?.config ?? {}) })
@@ -44,7 +55,7 @@ async function withPlugin(options, run) {
     return { definition, value, content }
   }
   try {
-    await run({ registered, call, root, stateDir, config })
+    await run({ registered, call, root, stateDir, config, sections })
   } finally {
     if (previousAppData === undefined) delete process.env.APPDATA
     else process.env.APPDATA = previousAppData
@@ -281,8 +292,17 @@ test('vaults are discovered from Obsidian\'s registry and the open one becomes a
     }), 'utf8')
 
     const registered = new Map()
-    const ctx = { tools: { register(definition) { registered.set(definition.name, definition); return () => {} } } }
+    const sections = []
+    const ctx = {
+      tools: { register(definition) { registered.set(definition.name, definition); return () => {} } },
+      inject(services, mount) {
+        if (services.includes('systemPrompt')) {
+          mount({ section(section) { sections.push(section); return () => {} } })
+        }
+      },
+    }
     apply(ctx, normalizeConfig({ stateDir }))
+    assert.equal(sections.length, 1)
     const value = await registered.get('obsidian_vaults').execute({}, { signal: new AbortController().signal })
     assert.equal(value.vaults.length, 2)
     assert.equal(value.active.path, vaultA)
@@ -367,6 +387,25 @@ test('renderers stay total for empty and unusual results', async () => {
   })
 })
 
+test('apply injects the agent-guidance prompt section through systemPrompt', async () => {
+  await withPlugin({}, async ({ sections }) => {
+    assert.equal(sections.length, 1)
+    const section = sections[0]
+    assert.equal(section.name, 'obsidian:agent-guidance')
+    assert.equal(typeof section.order, 'number')
+    assert.ok(section.text.includes('Consult the vault'))
+    assert.ok(section.text.includes('daily note'))
+    // The section guides behavior without duplicating tool parameter details.
+    assert.ok(!section.text.includes('dryRun'))
+  })
+})
+
+test('agentGuidance can be disabled in config', async () => {
+  await withPlugin({ config: { agentGuidance: false } }, async ({ sections }) => {
+    assert.equal(sections.length, 0)
+  })
+})
+
 test('normalizeConfig validates types and rejects unknown keys', () => {
   assert.deepEqual(normalizeConfig(undefined).vault, null)
   assert.equal(normalizeConfig({ readOnly: true }).readOnly, true)
@@ -394,6 +433,7 @@ test('the Config standard schema validates and reports issues', () => {
     maxCacheBytes: null,
     dailyFolder: null,
     dailyFormat: null,
+    agentGuidance: true,
     stateDir: null,
     debug: false,
     rest: { enabled: true, baseURL: null, apiKey: null },
