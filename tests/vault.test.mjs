@@ -534,6 +534,48 @@ test('attachFile copies local files into the vault honoring the attachment setti
   })
 })
 
+test('writeNote creates notes from vault templates with placeholders', async () => {
+  await withVault({
+    files: {
+      '.obsidian/templates.json': '{"folder":"Templates","format":"YYYY-MM-DD"}\n',
+      'Templates/Meeting.md': [
+        '---',
+        'tags: [meeting]',
+        '---',
+        '',
+        '# {{title}}',
+        '',
+        '- date: {{date}}',
+        '- year: {{date:YYYY}}',
+        '- time: {{time}}',
+        '',
+      ].join('\n'),
+    },
+  }, async (vault, root) => {
+    await vault.scan()
+    const created = await vault.writeNote({ note: 'Meetings/Standup', template: 'Meeting' })
+    assert.equal(created.created, true)
+    assert.equal(created.path, 'Meetings/Standup.md')
+    const text = await fsp.readFile(path.join(root, 'Meetings/Standup.md'), 'utf8')
+    assert.ok(text.includes('# Standup'), `{{title}} replaced:\n${text}`)
+    assert.ok(text.includes(`- date: ${formatDate(new Date(), 'YYYY-MM-DD')}`), `{{date}} replaced:\n${text}`)
+    assert.ok(text.includes(`- year: ${new Date().getFullYear()}`), `{{date:FORMAT}} replaced:\n${text}`)
+    assert.ok(/- time: \d{2}:\d{2}/.test(text), `{{time}} replaced:\n${text}`)
+    assert.ok(text.includes('tags: [meeting]'), 'template frontmatter carries over')
+
+    await assert.rejects(() => vault.writeNote({ note: 'Meetings/X', template: 'Missing' }), /template not found/)
+    await assert.rejects(() => vault.writeNote({ note: 'Meetings/X', template: 'Meeting', content: 'x' }), /not both/)
+    await assert.rejects(() => vault.writeNote({ note: 'Meetings/X', template: 'Meeting', mode: 'append' }), /mode "create"/)
+  })
+})
+
+test('writeNote reports when no template folder is configured', async () => {
+  await withVault({}, async (vault) => {
+    await vault.scan()
+    await assert.rejects(() => vault.writeNote({ note: 'X.md', template: 'Whatever' }), /no template folder configured/)
+  })
+})
+
 test('the index and parse cache follow external edits', async () => {
   await withVault({}, async (vault, root) => {
     await vault.scan()
