@@ -57,6 +57,7 @@ test('registers every tool with schemas inside the enforced JSON-Schema subset',
   await withPlugin({}, async ({ registered }) => {
     assert.deepEqual([...registered.keys()].sort(), [
       'obsidian_app',
+      'obsidian_attach',
       'obsidian_delete',
       'obsidian_links',
       'obsidian_list',
@@ -79,7 +80,7 @@ test('registers every tool with schemas inside the enforced JSON-Schema subset',
       for (const [key, node] of Object.entries(properties)) {
         assert.ok(node.type !== undefined || Array.isArray(node.oneOf), `${name}.${key} declares a type`)
       }
-      const mutating = ['obsidian_write', 'obsidian_move', 'obsidian_delete'].includes(name)
+      const mutating = ['obsidian_write', 'obsidian_move', 'obsidian_delete', 'obsidian_attach'].includes(name)
       assert.equal(definition.isConcurrencySafe(mutating ? {} : { action: 'search' }), !mutating)
     }
   })
@@ -341,7 +342,7 @@ test('renderers stay total for empty and unusual results', async () => {
       assert.equal(typeof RENDERERS[name], 'function')
     }
     const definitions = createObsidianTools({ state: null })
-    assert.equal(definitions.length, 9)
+    assert.equal(definitions.length, 10)
     for (const definition of definitions) {
       assert.ok(Object.hasOwn(PARAMETER_SCHEMAS, definition.name))
       assert.ok(Object.hasOwn(OUTPUT_SCHEMAS, definition.name))
@@ -369,6 +370,8 @@ test('the Config standard schema validates and reports issues', () => {
     excludes: [],
     indexExtensions: [],
     writableExtensions: [],
+    attachmentExtensions: [],
+    attachmentFolder: null,
     readOnly: false,
     indexTtlMs: null,
     maxCacheBytes: null,

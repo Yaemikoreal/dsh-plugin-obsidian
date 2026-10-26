@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict'
 import fsp from 'node:fs/promises'
+import os from 'node:os'
 import path from 'node:path'
 import test from 'node:test'
 
@@ -487,6 +488,49 @@ test('writeNote supports @daily for offline daily notes', async () => {
 
     await assert.rejects(() => vault.writeNote({ note: '@daily-2026-13-99', content: 'x' }), /invalid date/)
     await assert.rejects(() => vault.writeNote({ note: '@daily-2026-13-99-extra', content: 'x' }), /unknown "@daily" reference/)
+  })
+})
+
+test('attachFile copies local files into the vault honoring the attachment settings', async () => {
+  await withVault({}, async (vault, root) => {
+    await vault.scan()
+    const outside = await fsp.mkdtemp(path.join(os.tmpdir(), 'dsh-obsidian-src-'))
+    try {
+      const png = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x01])
+      await fsp.writeFile(path.join(outside, 'chart.png'), png)
+
+      // app.json says attachmentFolderPath "attachments".
+      const first = await vault.attachFile({ source: path.join(outside, 'chart.png') })
+      assert.equal(first.path, 'attachments/chart.png')
+      assert.equal(first.embed, '![[chart.png]]')
+      assert.equal(first.bytes, png.length)
+      assert.equal(await fsp.readFile(path.join(root, 'attachments/chart.png')).then((buffer) => buffer.equals(png)), true)
+
+      const second = await vault.attachFile({ source: path.join(outside, 'chart.png') })
+      assert.equal(second.path, 'attachments/chart-1.png')
+
+      const renamed = await vault.attachFile({ source: path.join(outside, 'chart.png'), name: 'diagram', folder: 'Images/Deep' })
+      assert.equal(renamed.path, 'Images/Deep/diagram.png')
+      assert.equal(renamed.embed, '![[diagram.png]]')
+
+      const noteRelative = await vault.attachFile({ source: path.join(outside, 'chart.png'), folder: './', note: 'Projects/Alpha.md' })
+      assert.equal(noteRelative.path, 'Projects/chart.png')
+      assert.equal(noteRelative.appendedToNote, true)
+      const alpha = await fsp.readFile(path.join(root, 'Projects/Alpha.md'), 'utf8')
+      assert.ok(alpha.includes('![[chart.png]]'))
+
+      const plan = await vault.attachFile({ source: path.join(outside, 'chart.png'), dryRun: true })
+      assert.equal(plan.dryRun, true)
+      assert.equal(await fsp.access(path.join(root, 'attachments/chart-3.png')).then(() => true, () => false), false)
+
+      await assert.rejects(() => vault.attachFile({ source: 'relative/path.png' }), /absolute local path/)
+      await assert.rejects(() => vault.attachFile({ source: path.join(outside, 'missing.png') }), /does not exist/)
+      await assert.rejects(() => vault.attachFile({ source: path.join(outside, 'chart.png'), name: 'evil.exe' }), /not allowed as an attachment/)
+      const readOnly = new ObsidianVault({ root, ttlMs: 0, readOnly: true })
+      await assert.rejects(() => readOnly.attachFile({ source: path.join(outside, 'chart.png') }), /read-only/)
+    } finally {
+      await fsp.rm(outside, { recursive: true, force: true })
+    }
   })
 })
 
