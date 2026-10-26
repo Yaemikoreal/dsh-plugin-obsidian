@@ -471,6 +471,25 @@ test('deleteNote collision in .trash gets a numeric suffix', async () => {
   })
 })
 
+test('writeNote supports @daily for offline daily notes', async () => {
+  await withVault({}, async (vault, root) => {
+    await vault.scan()
+    const appended = await vault.writeNote({ note: '@daily-2026-10-10', mode: 'append', content: 'late evening note' })
+    assert.equal(appended.path, 'Daily/2026-10-10.md')
+    const text = await fsp.readFile(path.join(root, 'Daily/2026-10-10.md'), 'utf8')
+    assert.ok(text.includes('Standup notes.'))
+    assert.ok(text.includes('late evening note'))
+
+    const today = await vault.writeNote({ note: '@daily', content: '# Journal\n' })
+    assert.equal(today.path, await vault.dailyPath(undefined))
+    assert.ok(today.path.startsWith('Daily/'))
+    assert.equal(today.created, true)
+
+    await assert.rejects(() => vault.writeNote({ note: '@daily-2026-13-99', content: 'x' }), /invalid date/)
+    await assert.rejects(() => vault.writeNote({ note: '@daily-2026-13-99-extra', content: 'x' }), /unknown "@daily" reference/)
+  })
+})
+
 test('the index and parse cache follow external edits', async () => {
   await withVault({}, async (vault, root) => {
     await vault.scan()
