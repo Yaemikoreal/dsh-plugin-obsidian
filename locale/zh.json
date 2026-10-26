@@ -1,6 +1,6 @@
 {
   "meta": {
     "title": "Obsidian 笔记",
-    "description": "让 DeepSeek Harness 直接搜索、读取、写入和整理 Obsidian 笔记（移动、重命名、删除带链接更新与回收站）；装了 Local REST API 插件后还能操作正在运行的 Obsidian：打开笔记、读取当前笔记、实时搜索、日记、命令与标签。"
+    "description": "让 DeepSeek Harness 直接搜索、读取、写入和整理 Obsidian 笔记：任务收集、附件入库、离线日记、模板创建、移动重命名（链接自动更新）、回收站式删除；装了 Local REST API 插件后还能操作正在运行的 Obsidian。"
   }
 }

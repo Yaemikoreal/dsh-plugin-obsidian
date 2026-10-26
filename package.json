@@ -1,6 +1,6 @@
 {
   "name": "dsh-plugin-obsidian",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Obsidian vault bridge for DeepSeek Harness: fast search, read, write, and reorganization (move, rename, trash-safe delete with link updates) of notes, plus live Obsidian app integration through the Obsidian Local REST API.",
   "author": "Yaemikoreal",
   "license": "MIT",
