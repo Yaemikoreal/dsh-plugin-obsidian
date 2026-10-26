@@ -617,6 +617,32 @@ test('collectTasks gathers checklist tasks with status, query, and folder filter
   })
 })
 
+test('deleteNote also removes attachments and reports embed references', async () => {
+  await withVault({}, async (vault, root) => {
+    await vault.scan()
+    const outside = await fsp.mkdtemp(path.join(os.tmpdir(), 'dsh-obsidian-src-'))
+    try {
+      await fsp.writeFile(path.join(outside, 'pic.png'), Buffer.from([0x89, 0x50, 0x4e, 0x47]))
+      const attached = await vault.attachFile({ source: path.join(outside, 'pic.png') })
+      assert.equal(attached.path, 'attachments/pic.png')
+      await vault.writeNote({ note: 'Projects/Beta.md', mode: 'append', content: '![[pic.png]]' })
+
+      const plan = await vault.deleteNote({ note: 'attachments/pic.png', dryRun: true })
+      assert.equal(plan.dryRun, true)
+      assert.equal(plan.backlinkCount, 1)
+      assert.equal(plan.backlinks[0].path, 'Projects/Beta.md')
+
+      const done = await vault.deleteNote({ note: 'pic.png' })
+      assert.equal(done.path, 'attachments/pic.png')
+      assert.equal(done.trashTarget, '.trash/attachments/pic.png')
+      assert.equal(await fsp.access(path.join(root, 'attachments/pic.png')).then(() => true, () => false), false)
+      assert.equal(await fsp.access(path.join(root, '.trash/attachments/pic.png')).then(() => true, () => false), true)
+    } finally {
+      await fsp.rm(outside, { recursive: true, force: true })
+    }
+  })
+})
+
 test('writeNote reports when no template folder is configured', async () => {
   await withVault({}, async (vault) => {
     await vault.scan()
