@@ -569,6 +569,54 @@ test('writeNote creates notes from vault templates with placeholders', async () 
   })
 })
 
+test('collectTasks gathers checklist tasks with status, query, and folder filters', async () => {
+  await withVault({
+    files: {
+      'Projects/Alpha.md': [
+        '---',
+        'tags: [project, alpha]',
+        '---',
+        '',
+        '# Alpha',
+        '',
+        '- [ ] task one',
+        '- [x] task two',
+        '- [/] in progress task',
+        '1. [ ] ordered task',
+        '',
+        '```md',
+        '- [ ] fake task in fence',
+        '```',
+        '',
+      ].join('\n'),
+    },
+  }, async (vault) => {
+    await vault.scan()
+    const open = await vault.collectTasks({ status: 'open' })
+    assert.deepEqual(open.tasks.map((task) => task.text).sort(), ['ordered task', 'task one'])
+    const all = await vault.collectTasks({ status: 'all' })
+    assert.equal(all.total, 4)
+    assert.ok(!all.tasks.some((task) => task.text.includes('fake task')), 'code fences are skipped')
+    const done = await vault.collectTasks({ status: 'done' })
+    assert.equal(done.total, 1)
+    assert.equal(done.tasks[0].status, 'done')
+    assert.equal(done.tasks[0].mark, 'x')
+    const byQuery = await vault.collectTasks({ status: 'all', query: 'ordered' })
+    assert.deepEqual(byQuery.tasks.map((task) => task.line), [10])
+    const byFolder = await vault.collectTasks({ status: 'all', folder: 'Projects' })
+    assert.equal(byFolder.total, 4)
+    const none = await vault.collectTasks({ status: 'all', folder: 'Daily' })
+    assert.equal(none.total, 0)
+    const limited = await vault.collectTasks({ status: 'all', limit: 2 })
+    assert.equal(limited.tasks.length, 2)
+    assert.equal(limited.truncated, true)
+    const one = all.tasks.find((task) => task.text === 'task one')
+    assert.equal(one.line, 7)
+    assert.equal(one.status, 'open')
+    await assert.rejects(() => vault.collectTasks({ status: 'sometimes' }), /status must be one of/)
+  })
+})
+
 test('writeNote reports when no template folder is configured', async () => {
   await withVault({}, async (vault) => {
     await vault.scan()

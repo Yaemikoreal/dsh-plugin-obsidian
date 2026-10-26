@@ -64,6 +64,7 @@ test('registers every tool with schemas inside the enforced JSON-Schema subset',
       'obsidian_move',
       'obsidian_read',
       'obsidian_search',
+      'obsidian_tasks',
       'obsidian_vaults',
       'obsidian_write',
     ])
@@ -200,6 +201,22 @@ test('move and delete reject invalid input through the tool surface', async () =
     await assert.rejects(() => call('obsidian_delete', {}), /missing required argument "note"/)
     await assert.rejects(() => call('obsidian_delete', { note: 'Ghost' }), /not found/)
     await assert.rejects(() => call('obsidian_delete', { note: 'Projects/Alpha.md', permanent: 'yes' }), /must be a boolean/)
+  })
+})
+
+test('tasks collection works end to end with a valid canonical output', async () => {
+  await withPlugin({}, async ({ call }) => {
+    const tasks = await call('obsidian_tasks', { status: 'open' })
+    assert.equal(tasks.value.status, 'open')
+    assert.ok(tasks.value.tasks.some((task) => task.path === 'Projects/Alpha.md' && task.text === 'task one'))
+    assert.ok(tasks.content[0].text.includes('task one'))
+
+    const done = await call('obsidian_tasks', { status: 'done' })
+    assert.equal(done.value.total, 0)
+
+    const queried = await call('obsidian_tasks', { status: 'all', query: 'task one' })
+    assert.equal(queried.value.total, 1)
+    assert.equal(queried.value.tasks[0].line, 14)
   })
 })
 
@@ -342,7 +359,7 @@ test('renderers stay total for empty and unusual results', async () => {
       assert.equal(typeof RENDERERS[name], 'function')
     }
     const definitions = createObsidianTools({ state: null })
-    assert.equal(definitions.length, 10)
+    assert.equal(definitions.length, 11)
     for (const definition of definitions) {
       assert.ok(Object.hasOwn(PARAMETER_SCHEMAS, definition.name))
       assert.ok(Object.hasOwn(OUTPUT_SCHEMAS, definition.name))
