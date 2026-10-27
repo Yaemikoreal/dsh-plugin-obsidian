@@ -31,12 +31,9 @@ async function withPlugin(options, run) {
     },
     inject(services, mount) {
       if (services.includes('systemPrompt')) {
-        mount({
-          section(section) {
-            sections.push(section)
-            return () => {}
-          },
-        })
+        // Mimics real cordis: the callback receives an injected context view
+        // whose services are properties, not the service instance itself.
+        mount({ systemPrompt: { section(section) { sections.push(section); return () => {} } } })
       }
     },
   }
@@ -297,7 +294,7 @@ test('vaults are discovered from Obsidian\'s registry and the open one becomes a
       tools: { register(definition) { registered.set(definition.name, definition); return () => {} } },
       inject(services, mount) {
         if (services.includes('systemPrompt')) {
-          mount({ section(section) { sections.push(section); return () => {} } })
+          mount({ systemPrompt: { section(section) { sections.push(section); return () => {} } } })
         }
       },
     }

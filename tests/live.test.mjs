@@ -35,7 +35,7 @@ function toolset() {
     tools: { register(definition) { registered.set(definition.name, definition); return () => {} } },
     inject(services, mount) {
       if (services.includes('systemPrompt')) {
-        mount({ section() { return () => {} } })
+        mount({ systemPrompt: { section() { return () => {} } } })
       }
     },
   }
